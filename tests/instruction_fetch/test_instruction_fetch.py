@@ -5,7 +5,6 @@ from helpers.instruction_memory_model import InstructionMemoryModel
 
 
 
-
 @cocotb.test()
 async def test_instruction_fetch(dut):
 
