@@ -7,7 +7,7 @@ module register_file(
     input logic w_en,
     output logic [31 : 0] data_reg1,
     output logic [31 : 0] data_reg2
-)
+);
 
 reg [31:0] reg_file [0:31];
 
