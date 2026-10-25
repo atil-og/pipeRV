@@ -17,6 +17,10 @@ ip_user_files/
 __pycache__/
 venv/
 .pytest_cache/
+**/sim_build/
+**/results.xml
+sim_build/
+results.xml
 
 # System-Files
 .DS_Store
