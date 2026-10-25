@@ -1,14 +1,15 @@
 # Makefile
-
+export COCOTB_LOG_LEVEL = INFO
 
 SIM ?= icarus
 TOPLEVEL_LANG ?= verilog
 
 VERILOG_SOURCES += $(PWD)/../rtl/program_counter.sv
 VERILOG_SOURCES += $(PWD)/../rtl/imem.sv
+VERILOG_SOURCES += $(PWD)/../rtl/instruction_fetch.sv
 
-TOPLEVEL ?= program_counter
-MODULE ?= test_pc
+TOPLEVEL = instruction_fetch
+MODULE = test_instruction_fetch
 
 WAVES = 1
 

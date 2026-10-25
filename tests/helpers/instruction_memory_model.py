@@ -6,4 +6,4 @@ class InstructionMemoryModel:
     def load(self, instructions):
         "Writes instructions into the instruction memory of the processor"
         for addr, instr in enumerate(instructions):
-            self.dut.memory[addr].value = instr
+            self.dut.imem_inst.memory[addr].value = instr
