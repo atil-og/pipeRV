@@ -1,0 +1,23 @@
+# Verilator / C++ Simulations
+obj_dir/
+*.vcd
+*.log
+
+# Xilinx Vivado
+*.jou
+*.str
+*.xpr
+.Xil/
+ip_user_files/
+*.hw
+*.sim
+*.runs
+
+# Python / Cocotb
+__pycache__/
+venv/
+.pytest_cache/
+
+# System-Files
+.DS_Store
+Thumbs.db
