@@ -9,7 +9,7 @@ module register_file(
     output logic [31 : 0] data_reg2
 )
 
-reg [0:31] reg_file [31:0];
+reg [31:0] reg_file [0:31];
 
 assign data_reg1 = (addr_reg_1 == 5'b0) ? 32'b0 : reg_file[addr_reg_1];
 assign data_reg2 = (addr_reg_2 == 5'b0) ? 32'b0 : reg_file[addr_reg_2];
