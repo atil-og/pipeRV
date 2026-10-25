@@ -3,10 +3,10 @@ module register_file(
     input logic [0 : 4] addr_reg_1,
     input logic [0 : 4] addr_reg_2,
     input logic [0 : 4] write_destination,
-    input logic [0 : 31] write_data,
+    input logic [31 : 0] write_data,
     input logic w_en,
-    output logic [0 : 31] data_reg1,
-    output logic [0 : 31] data_reg2
+    output logic [31 : 0] data_reg1,
+    output logic [31 : 0] data_reg2
 )
 
 reg [0:31] reg_file [31:0];
