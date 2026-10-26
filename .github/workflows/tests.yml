@@ -1,0 +1,70 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Find every test folder (tests/<module>/Makefile) so new modules are picked up automatically
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      tests: ${{ steps.list.outputs.tests }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          tests=$(ls tests/*/Makefile | xargs -n1 dirname | xargs -n1 basename | jq -R . | jq -sc .)
+          echo "tests=$tests" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        test: ${{ fromJson(needs.discover.outputs.tests) }}
+    name: ${{ matrix.test }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Icarus Verilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog
+
+      - name: Install cocotb
+        run: pip install "cocotb>=2.0" pytest
+
+      - name: Run tests
+        working-directory: tests/${{ matrix.test }}
+        run: make
+
+      - name: Check results
+        working-directory: tests/${{ matrix.test }}
+        run: |
+          python3 - <<'EOF'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse("results.xml").getroot()
+          failed = [
+              tc.get("name")
+              for tc in root.iter("testcase")
+              if tc.find("failure") is not None or tc.find("error") is not None
+          ]
+          if failed:
+              print("Failed tests:", ", ".join(failed))
+              sys.exit(1)
+          print("All tests passed")
+          EOF
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.test }}
+          path: tests/${{ matrix.test }}/results.xml
