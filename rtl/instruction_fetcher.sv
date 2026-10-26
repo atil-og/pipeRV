@@ -1,4 +1,4 @@
-module instruction_fetch(
+module instruction_fetcher(
     input logic clk,
     input logic rst_n,
     output logic [31:0] instr_out

@@ -24,4 +24,8 @@ results.xml
 
 # System-Files
 .DS_Store
-Thumbs.db
+Thumbs.db__pycache__/
+sim_build/
+results*.xml
+*.vcd
+*.fst

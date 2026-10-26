@@ -14,7 +14,7 @@ async def test_instruction_fetch(dut):
 
     dut.rst_n.value = 0
 
-    imem_model = InstructionMemoryModel(dut = dut)
+    imem_model = InstructionMemoryModel(memory = dut.imem_inst.memory)
     imem_model.load([
             0x00000013,  # NOP (addi x0, x0, 0)
             0x00100093,  # ADDI x1, x0, 1

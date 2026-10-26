@@ -7,7 +7,7 @@ from helpers.instruction_memory_model import InstructionMemoryModel
 async def test_imem(dut):
     logger = logging.getLogger("imem_testbench")
 
-    imem_model = InstructionMemoryModel(dut = dut)
+    imem_model = InstructionMemoryModel(memory = dut.memory)
     imem_model.load([
         0x00000013,  # NOP
         0x00100093
