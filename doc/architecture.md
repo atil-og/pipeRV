@@ -61,7 +61,7 @@ Priority: reset > `pc_sel` > `stall` > `pc + 4`.
 
 ### `imem`
 
-Instruction memory, read combinationally. It is word addressed internally, so `read_address` is a byte address and the lower two bits are ignored. In simulation the memory array is loaded from Python via `tests/helpers/instruction_memory_model.py`.
+Instruction memory, read combinationally. It is word addressed internally, so `read_address` is a byte address and the lower two bits are ignored. In simulation the memory array is loaded from Python via `sim/helpers/instruction_memory_model.py`.
 
 | Port | Dir | Width | Description |
 |---|---|---|---|
@@ -183,7 +183,7 @@ Pipeline register between ID and EX. Stores the three control structs plus `pc`,
 
 ## Testing
 
-Every module has its own folder under `tests/` containing a `Makefile` and `test_<module>.py`. Tests use `assert`, so a failing check fails the test (logging alone does not).
+Every module has its own folder under `sim/` containing a `Makefile` and `test_<module>.py`. Tests use `assert`, so a failing check fails the test (logging alone does not).
 
 Conventions used in the testbenches:
 

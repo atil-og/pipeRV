@@ -24,7 +24,7 @@ A 5-stage pipelined RISC-V processor (RV32I) written in SystemVerilog and verifi
 pipeRV/
 ├── doc/            documentation
 ├── rtl/            SystemVerilog sources, one module per file
-└── tests/
+└── sim/
     ├── helpers/    shared Python models used by several tests
     └── <module>/   one folder per module: Makefile + test_<module>.py
 ```
@@ -40,14 +40,14 @@ pipeRV/
 Each module has its own test folder. To run one:
 
 ```bash
-cd tests/register_file
+cd sim/register_file
 make
 ```
 
 To run all of them:
 
 ```bash
-for t in tests/*/Makefile; do make -C "$(dirname "$t")" || break; done
+for t in sim/*/Makefile; do make -C "$(dirname "$t")" || break; done
 ```
 
 Waveforms are written to `sim_build/` (`WAVES = 1` in every Makefile). `make clean` removes all build artifacts.
