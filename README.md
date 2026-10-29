@@ -1,6 +1,3 @@
-[![tests](https://github.com/atil-og/pipeRV/actions/workflows/tests.yml/badge.svg)](https://github.com/atil-og/pipeRV/actions/workflows/tests.yml)
-
-
 # pipeRV
 
 A 5-stage pipelined RISC-V processor (RV32I) written in SystemVerilog and verified with [cocotb](https://www.cocotb.org/) on Icarus Verilog.
@@ -11,7 +8,7 @@ A 5-stage pipelined RISC-V processor (RV32I) written in SystemVerilog and verifi
 |---|---|---|
 | IF  | `program_counter`, `imem`, `instruction_fetcher` (incl. IF/ID register) | done, tested |
 | ID  | `instruction_decoder`, `immediate_generator`, `register_file` | done, tested |
-| ID  | `control_unit`, `riscv_pkg` | in progress |
+| ID  | `control_unit`, `riscv_pkg`, `decode_stage` | done, tested |
 | ID/EX | `id_ex_reg` | in progress |
 | EX  | ALU, branch unit | planned |
 | MEM | data memory | planned |

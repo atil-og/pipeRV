@@ -129,7 +129,7 @@ Registers are read in ID but written in WB, so the write port is driven by the w
 
 Open point: a write and a read of the same register in the same cycle currently returns the old value. An internal bypass is planned (`test_write_read_bypass` is skipped until then).
 
-### `control_unit` *(in progress)*
+### `control_unit`
 
 Combinational. Derives the control signals from `opcode`, `funct3` and `funct7` and groups them by the stage that uses them.
 
@@ -163,6 +163,51 @@ Settings per instruction type (empty = 0):
 
 FENCE, ECALL, EBREAK and unknown opcodes decode to a NOP. There is no `subi`: for I-type arithmetic, `funct7[5]` only selects between `srli` and `srai`.
 
+#### Bit layout of the control structs
+
+The structs are `packed`, so outside SystemVerilog (in cocotb, in waveforms) they appear as plain bit vectors. The first field in the declaration occupies the highest bits:
+
+| Struct | Width | Bits |
+|---|---|---|
+| `ex_ctrl_t` | 9 | `[8:5]` alu_op, `[4]` alu_src_a, `[3]` alu_src_b, `[2]` branch, `[1]` jump, `[0]` jalr |
+| `mem_ctrl_t` | 2 | `[1]` mem_read, `[0]` mem_write |
+| `wb_ctrl_t` | 3 | `[2]` reg_write, `[1:0]` wb_sel |
+
+The testbenches pack and unpack these by hand, so changing the field order in `riscv_pkg.sv` also requires updating `ex_ctrl()`, `mem_ctrl()` and `wb_ctrl()` in `sim/decode_stage/test_decode_stage.py`.
+
+### `decode_stage`
+
+ID stage. Instantiates `instruction_decoder`, `control_unit` and `register_file` side by side and only wires them together; it contains no logic of its own. The control unit is deliberately not nested inside the decoder: it only needs `opcode`, `funct3` and `funct7`, so it can be tested on its own without building full instructions.
+
+```mermaid
+flowchart LR
+    instr["instr<br/>(from IF/ID)"] --> DEC["instruction_decoder<br/>+ immediate_generator"]
+    DEC -- "opcode, funct3, funct7" --> CU["control_unit"]
+    DEC -- "rs1, rs2" --> RF["register_file"]
+    WB["wb_reg_write, wb_rd, wb_data<br/>(from WB)"] --> RF
+    CU -- "ex_ctrl, mem_ctrl, wb_ctrl" --> OUT["to ID/EX"]
+    RF -- "rs1_data, rs2_data" --> OUT
+    DEC -- "imm, rs1, rs2, rd, funct3" --> OUT
+```
+
+| Port | Dir | Width | Description |
+|---|---|---|---|
+| `clk` | in | 1 | clock, only used by the register file write port |
+| `instr` | in | 32 | instruction from IF/ID |
+| `wb_reg_write` | in | 1 | write enable from the WB stage |
+| `wb_rd` | in | 5 | destination register from the WB stage |
+| `wb_data` | in | 32 | write-back value |
+| `ex_ctrl` | out | `ex_ctrl_t` | control signals for EX |
+| `mem_ctrl` | out | `mem_ctrl_t` | control signals for MEM |
+| `wb_ctrl` | out | `wb_ctrl_t` | control signals for WB |
+| `rs1_data`, `rs2_data` | out | 32 | register values |
+| `imm` | out | 32 | sign-extended immediate |
+| `rs1`, `rs2` | out | 5 | source register numbers, kept for the forwarding unit |
+| `rd` | out | 5 | destination register number |
+| `funct3` | out | 3 | branch condition / memory access width |
+
+The register file is read here but written four stages later, which is why the write port comes back in from WB. Everything apart from the register file write is combinational, so all outputs follow `instr` without waiting for a clock edge.
+
 ### `id_ex_reg` *(in progress)*
 
 Pipeline register between ID and EX. Stores the three control structs plus `pc`, `rs1_data`, `rs2_data`, `imm`, `rs1`, `rs2`, `rd` and `funct3`.
@@ -191,3 +236,16 @@ Conventions used in the testbenches:
 - Clocked modules: a `setup()` helper starts a 10 ns clock, drives every input to a known value and applies reset. A `step()` helper waits for a rising edge plus 1 ns, so inputs are always changed far away from the next edge.
 - Inputs that are not driven are `X` in simulation and propagate, so every new port must be initialised in `setup()`.
 - Expected negative values are written as Python ints and masked with `& 0xFFFFFFFF` before comparing.
+- In cocotb 2.x a 1-bit signal is a `Logic`, not a `LogicArray`, and has no `.to_unsigned()`. `int(dut.signal.value)` works for both.
+- Icarus prints `sorry: constant selects in always_* processes are not currently supported` for several modules. This only concerns the sensitivity list of `always_comb` and does not affect results.
+
+### Test coverage
+
+| Module | What is checked |
+|---|---|
+| `program_counter` | reset value, increment by 4, asynchronous reset during operation, stall holds and releases, jump loads the target and counts on, jump overrides stall |
+| `imem` | instructions loaded through `InstructionMemoryModel` are read back at the right addresses |
+| `instruction_fetcher` | NOP at PC 0 during reset, sequential fetch with matching `pc_out`, stall holds `instr_out` / `pc_out`, jump flushes the fetched instruction and continues at the target |
+| `register_file` | x0 reads 0, all registers on both ports, write enable, random accesses against a model |
+| `immediate_generator` | all formats with hand-checked instructions, boundary values, random immediates |
+| `decode_stage` | field extraction, control signals for every instruction type (incl. negative `addi` and `srai`), immediate wiring, register read through the WB port, x0 and write enable |
