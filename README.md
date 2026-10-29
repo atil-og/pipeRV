@@ -1,3 +1,6 @@
+[![tests](https://github.com/atil-og/pipeRV/actions/workflows/tests.yml/badge.svg)](https://github.com/atil-og/pipeRV/actions/workflows/tests.yml)
+
+
 # pipeRV
 
 A 5-stage pipelined RISC-V processor (RV32I) written in SystemVerilog and verified with [cocotb](https://www.cocotb.org/) on Icarus Verilog.
