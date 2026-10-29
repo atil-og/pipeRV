@@ -1,8 +1,8 @@
 module register_file(
     input logic clk,
-    input logic [0 : 4] addr_reg_1,
-    input logic [0 : 4] addr_reg_2,
-    input logic [0 : 4] write_destination,
+    input logic [4 : 0] addr_reg_1,
+    input logic [4 : 0] addr_reg_2,
+    input logic [4 : 0] write_destination,
     input logic [31 : 0] write_data,
     input logic w_en,
     output logic [31 : 0] data_reg1,

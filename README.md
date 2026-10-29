@@ -1,6 +1,11 @@
 # pipeRV
 
+[![tests](https://github.com/atil-og/pipeRV/actions/workflows/tests.yml/badge.svg)](https://github.com/atil-og/pipeRV/actions/workflows/tests.yml)
+
 A 5-stage pipelined RISC-V processor (RV32I) written in SystemVerilog and verified with [cocotb](https://www.cocotb.org/) on Icarus Verilog.
+
+This is a self-education project to deepen my understanding of computer architecture
+and digital design, from the RTL of a pipelined processor to its verification.
 
 ## Status
 
@@ -53,8 +58,8 @@ Waveforms are written to `sim_build/` (`WAVES = 1` in every Makefile). `make cle
 
 See [`doc/architecture.md`](doc/architecture.md) for the pipeline structure, module interfaces and design conventions.
 
-## Background
+## Acknowledgements
 
-This is a self-education project. I am building it to deepen my understanding of computer architecture and digital design, from the RTL of a pipelined processor to its verification.
-
-Prof. Onur Mutlu's lectures on *Digital Design and Computer Architecture* (ETH Zürich), which are freely available on [YouTube](https://www.youtube.com/@OnurMutluLectures), were especially helpful along the way. Many thanks for making them public.
+- Prof. Onur Mutlu's lectures on *Digital Design and Computer Architecture* (ETH Zürich),
+  freely available on [YouTube](https://www.youtube.com/@OnurMutluLectures), were especially
+  helpful throughout this project. Many thanks for making them public.

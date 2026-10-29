@@ -1,13 +1,12 @@
-module imem(
-    input logic [31 : 0] read_address,
-    output logic [31 : 0] instr
-    
-);
+  module imem #(
+      parameter int DEPTH = 1024                       // number of 32-bit words
+  ) (
+      input  logic [31:0] read_address,                // byte address
+      output logic [31:0] instr
+  );
+      localparam int AW = $clog2(DEPTH);
 
-reg [31 : 0] memory [0:1023];
-// 31:2 is used in order to get the index of the address to read out of the program counter
-// For example the address to be read is: 8 -> In the instructiom memory the index 2 has to be read, 
-// therefore the program counter is always divided by four by cutting of the last two bits.
-assign instr = memory[read_address[31:2]];
+      logic [31:0] memory [0:DEPTH-1];
 
-endmodule
+      assign instr = memory[read_address[AW+1:2]];     // word index, upper bits ignored
+  endmodule
