@@ -29,3 +29,4 @@ sim_build/
 results*.xml
 *.vcd
 *.fst
+sim/riscv_tests/build/

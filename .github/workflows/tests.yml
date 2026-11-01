@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  # Find every test folder (tests/<module>/Makefile) so new modules are picked up automatically
+  # Find every test folder (sim/<name>/Makefile) so new ones are picked up automatically
   discover:
     runs-on: ubuntu-latest
     outputs:
@@ -28,6 +28,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true          # third_party/riscv-tests
 
       - uses: actions/setup-python@v5
         with:
@@ -36,8 +38,12 @@ jobs:
       - name: Install Icarus Verilog
         run: sudo apt-get update && sudo apt-get install -y iverilog
 
+      - name: Install RISC-V GCC
+        if: matrix.test == 'riscv_tests'
+        run: sudo apt-get install -y gcc-riscv64-unknown-elf
+
       - name: Install cocotb
-        run: pip install "cocotb>=2.0" pytest
+        run: pip install "cocotb>=2.0"
 
       - name: Run tests
         working-directory: sim/${{ matrix.test }}

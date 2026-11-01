@@ -1,20 +1,18 @@
 """Whole-CPU tests: run small programs and check registers and data memory.
 
-Forwarding and the register file bypass are in place, so programs run without
-NOPs. Only loads still need one NOP behind them: the loaded value exists only
-after MEM, one cycle too late for the next instruction in EX. That gap is
-closed by load-use hazard detection, after which LOAD_PADDING becomes 0.
+Forwarding, the register file bypass and load-use hazard detection are in
+place, so programs run without any NOPs.
 """
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, Timer
+from cocotb.triggers import FallingEdge, RisingEdge, Timer
 
 from helpers.riscv_asm import Program
 
 
 PADDING = 0
-LOAD_PADDING = 1
+LOAD_PADDING = 0
 MASK32 = 0xFFFFFFFF
 
 
@@ -31,7 +29,14 @@ def dmem(dut):
 
 
 async def run(dut, program, cycles=None, clear_words=64):
-    """Load the program, clear registers and data memory, reset and run."""
+    """Reset, load the program, clear registers and data memory, then run.
+
+    Reset comes first: all tests share one simulation, and an access still in
+    the pipeline from the previous test must not hit the freshly loaded memory.
+    """
+    dut.rst_n.value = 0
+    await Timer(1, unit="ns")
+
     words = program.assemble()
     imem = dut.fetch_inst.imem_inst.memory
     for addr, word in enumerate(words):
@@ -44,7 +49,6 @@ async def run(dut, program, cycles=None, clear_words=64):
         dmem(dut)[i].value = 0
 
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
-    dut.rst_n.value = 0
     for _ in range(2):
         await RisingEdge(dut.clk)
     dut.rst_n.value = 1
@@ -294,12 +298,12 @@ async def test_forward_into_store_and_branch(dut):
 
 @cocotb.test()
 async def test_forward_after_load(dut):
-    """A load followed by one NOP, then the value is forwarded from MEM/WB."""
+    """A load directly followed by a user of its value: one stall, then MEM/WB forwarding."""
     p = Program(padding=PADDING, load_padding=LOAD_PADDING)
     p.addi(1, 0, 0x40)
     p.addi(2, 0, 123)
     p.sw(2, 0, 1)
-    p.lw(3, 0, 1)                    # + 1 NOP from load_padding
+    p.lw(3, 0, 1)
     p.addi(4, 3, 1)
     p.halt()
     await run(dut, p)
@@ -317,3 +321,79 @@ async def test_forward_link_register(dut):
     p.halt()
     await run(dut, p)
     check_regs(dut, {1: 4, 2: 104})
+
+
+# ---------------------------------------------------------------------------
+# Load-use hazards
+# ---------------------------------------------------------------------------
+
+@cocotb.test()
+async def test_load_use_cases(dut):
+    """Every way an instruction can use a value loaded directly before it."""
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
+    p.addi(1, 0, 0x40)
+    p.addi(2, 0, 0x48)
+    p.sw(2, 0, 1)                    # mem[0x40] = 0x48 (also usable as an address)
+    p.addi(9, 0, 5)
+    p.sw(9, 8, 1)                    # mem[0x48] = 5
+
+    p.lw(3, 0, 1)
+    p.addi(4, 3, 1)                  # rs1 depends on the load -> 0x49
+    p.lw(5, 0, 1)
+    p.add(6, 0, 5)                   # rs2 depends on the load -> 0x48
+    p.lw(7, 0, 1)
+    p.sw(7, 4, 1)                    # store data depends on the load -> mem[0x44] = 0x48
+    p.lw(8, 0, 1)
+    p.lw(10, 0, 8)                   # address depends on the load (pointer chasing) -> 5
+    p.lw(11, 0, 1)
+    p.sw(9, 4, 11)                   # store address depends on the load -> mem[0x4C] = 5
+    p.addi(14, 0, 100)
+    p.lw(15, 8, 1)
+    p.add(14, 14, 15)                # not idempotent: running twice would give 110 -> 105
+    p.lw(12, 8, 1)
+    p.beq(12, 9, "taken")            # branch operand depends on the load
+    p.addi(13, 0, 1)                 # skipped
+    p.label("taken")
+    p.halt()
+    await run(dut, p)
+
+    check_regs(dut, {4: 0x49, 6: 0x48, 10: 5, 13: 0, 14: 105})
+    assert word(dut, 0x44) == 0x48, f"word at 0x44 = 0x{word(dut, 0x44):08x}, expected 0x48"
+    assert word(dut, 0x4C) == 5, f"word at 0x4C = 0x{word(dut, 0x4C):08x}, expected 5"
+
+
+@cocotb.test()
+async def test_stall_count(dut):
+    """Exactly one stall cycle per load-use hazard, and none anywhere else."""
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
+    p.addi(1, 0, 0x40)
+    p.addi(2, 0, 7)
+    p.sw(2, 0, 1)
+    p.lw(3, 0, 1)
+    p.add(4, 3, 3)                   # hazard 1
+    p.lw(5, 0, 1)
+    p.add(6, 2, 2)                   # independent: no stall
+    p.add(7, 5, 2)                   # distance 2: forwarded from MEM/WB, no stall
+    p.lw(0, 0, 1)
+    p.add(8, 0, 0)                   # load into x0: no stall
+    p.lw(9, 0, 1)
+    p.add(10, 2, 9)                  # hazard 2 (rs2)
+    p.lw(11, 0, 1)
+    p.sw(11, 4, 1)                   # hazard 3 (store data)
+    p.halt()
+
+    stalls = 0
+
+    async def count():
+        nonlocal stalls
+        while True:
+            await FallingEdge(dut.clk)
+            if dut.stall.value.is_resolvable and int(dut.stall.value):
+                stalls += 1
+
+    cocotb.start_soon(count())
+    await run(dut, p)
+
+    check_regs(dut, {4: 14, 6: 14, 7: 14, 10: 14})
+    assert word(dut, 0x44) == 7, "store after load-use hazard went wrong"
+    assert stalls == 3, f"{stalls} stall cycles, expected exactly 3"

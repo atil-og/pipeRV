@@ -2,23 +2,40 @@
 
 [![tests](https://github.com/atil-og/pipeRV/actions/workflows/tests.yml/badge.svg)](https://github.com/atil-og/pipeRV/actions/workflows/tests.yml)
 
-A 5-stage pipelined RISC-V processor (RV32I) written in SystemVerilog and verified with [cocotb](https://www.cocotb.org/) on Icarus Verilog.
+A 5-stage pipelined RISC-V processor (RV32I) written in SystemVerilog and verified with [cocotb](https://www.cocotb.org/) on Icarus Verilog. It has full forwarding and load-use hazard detection and runs arbitrary RV32I programs without NOPs.
 
 This is a self-education project to deepen my understanding of computer architecture
 and digital design, from the RTL of a pipelined processor to its verification.
 
 ## Status
 
-| Stage | Module | Status |
+The pipeline is complete and runs real programs.
+
+| Part | Modules | Status |
 |---|---|---|
 | IF  | `program_counter`, `imem`, `instruction_fetcher` (incl. IF/ID register) | done, tested |
-| ID  | `instruction_decoder`, `immediate_generator`, `register_file` | done, tested |
-| ID  | `control_unit`, `riscv_pkg`, `decode_stage` | done, tested |
-| ID/EX | `id_ex_reg` | in progress |
-| EX  | ALU, branch unit | planned |
-| MEM | data memory | planned |
-| WB  | write-back mux | planned |
-| —   | forwarding unit, hazard detection | planned |
+| ID  | `instruction_decoder`, `immediate_generator`, `control_unit`, `register_file`, `decode_stage` | done, tested |
+| EX  | `alu`, `branch_unit`, `execute_stage` | done, tested |
+| MEM | `data_memory`, `memory_stage` | done, tested |
+| WB  | `writeback_stage` | done, tested |
+| Pipeline registers | `id_ex_reg`, `ex_mem_reg`, `mem_wb_reg` | done, tested |
+| Hazards | `forwarding_unit`, `hazard_unit`, register file bypass | done, tested |
+| Top level | `cpu_top` | done, 15 programs pass without NOPs |
+
+| Situation | Cost |
+|---|---|
+| ALU result used by the next instruction | 0 cycles (forwarded) |
+| Load result used by the next instruction | 1 stall cycle |
+| Taken branch / jump | 2 cycles (no branch prediction yet) |
+
+## Roadmap
+
+1. **v0.1:** pass the official [riscv-tests](https://github.com/riscv-software-src/riscv-tests) for RV32I
+2. Machine mode: Zicsr, exceptions, interrupts, performance counters
+3. M extension with a multi-cycle divider
+4. Branch prediction (BTB, bimodal, gshare, return address stack), measured with the performance counters
+5. Instruction and data caches with prefetching
+6. Out-of-order core, kept next to the in-order one as a baseline
 
 ## Repository layout
 
@@ -27,7 +44,8 @@ pipeRV/
 ├── doc/            documentation
 ├── rtl/            SystemVerilog sources, one module per file
 └── sim/
-    ├── helpers/    shared Python models used by several tests
+    ├── helpers/    shared Python helpers: a small RV32I assembler, memory model
+    ├── cpu_top/    programs run on the whole pipeline
     └── <module>/   one folder per module: Makefile + test_<module>.py
 ```
 
