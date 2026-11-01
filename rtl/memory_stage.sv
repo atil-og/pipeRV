@@ -1,7 +1,8 @@
 module memory_stage
     import riscv_pkg::*;
 #(
-    parameter int DEPTH = 1024
+    parameter int    DEPTH     = 1024,
+    parameter        DMEM_INIT = ""
 ) (
     input  logic        clk,
 
@@ -51,7 +52,7 @@ module memory_stage
         endcase
     end
 
-    data_memory #(.DEPTH(DEPTH)) dmem_inst (
+    data_memory #(.DEPTH(DEPTH), .INIT_FILE(DMEM_INIT)) dmem_inst (
         .clk   (clk),
         .addr  (addr),
         .we    (mem_ctrl.mem_write),

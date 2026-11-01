@@ -1,0 +1,54 @@
+
+/home/atilla/projects/pipeRV/sim/programs/build/blink.elf:     file format elf32-littleriscv
+
+
+Disassembly of section .text:
+
+00000000 <_start>:
+   0:	00011117          	auipc	sp,0x11
+   4:	00010113          	mv	sp,sp
+   8:	00010297          	auipc	t0,0x10
+   c:	ff828293          	addi	t0,t0,-8 # 10000 <__bss_end>
+  10:	00010317          	auipc	t1,0x10
+  14:	ff030313          	addi	t1,t1,-16 # 10000 <__bss_end>
+  18:	0062f863          	bgeu	t0,t1,28 <_start+0x28>
+  1c:	0002a023          	sw	zero,0(t0)
+  20:	00428293          	addi	t0,t0,4
+  24:	ff5ff06f          	j	18 <_start+0x18>
+  28:	00000097          	auipc	ra,0x0
+  2c:	00c080e7          	jalr	12(ra) # 34 <main>
+  30:	0000006f          	j	30 <_start+0x30>
+
+00000034 <main>:
+  34:	80000537          	lui	a0,0x80000
+  38:	ff010113          	addi	sp,sp,-16 # 10ff0 <__bss_end+0xff0>
+  3c:	00100593          	li	a1,1
+  40:	00100613          	li	a2,1
+  44:	80000837          	lui	a6,0x80000
+  48:	00450513          	addi	a0,a0,4 # 80000004 <__stack_top+0x7ffef004>
+  4c:	00400713          	li	a4,4
+  50:	00052783          	lw	a5,0(a0)
+  54:	0807f693          	andi	a3,a5,128
+  58:	02068a63          	beqz	a3,8c <main+0x58>
+  5c:	00f82023          	sw	a5,0(a6) # 80000000 <__stack_top+0x7ffef000>
+  60:	00012623          	sw	zero,12(sp)
+  64:	00c12783          	lw	a5,12(sp)
+  68:	fef764e3          	bltu	a4,a5,50 <main+0x1c>
+  6c:	00c12783          	lw	a5,12(sp)
+  70:	00178793          	addi	a5,a5,1
+  74:	00f12623          	sw	a5,12(sp)
+  78:	00c12783          	lw	a5,12(sp)
+  7c:	fef778e3          	bgeu	a4,a5,6c <main+0x38>
+  80:	00052783          	lw	a5,0(a0)
+  84:	0807f693          	andi	a3,a5,128
+  88:	fc069ae3          	bnez	a3,5c <main+0x28>
+  8c:	00c82023          	sw	a2,0(a6)
+  90:	00058a63          	beqz	a1,a4 <main+0x70>
+  94:	00161613          	slli	a2,a2,0x1
+  98:	f8060593          	addi	a1,a2,-128
+  9c:	00b035b3          	snez	a1,a1
+  a0:	fc1ff06f          	j	60 <main+0x2c>
+  a4:	00165613          	srli	a2,a2,0x1
+  a8:	fff60593          	addi	a1,a2,-1
+  ac:	0015b593          	seqz	a1,a1
+  b0:	fb1ff06f          	j	60 <main+0x2c>

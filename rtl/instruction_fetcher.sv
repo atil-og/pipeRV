@@ -1,4 +1,6 @@
-module instruction_fetcher (
+module instruction_fetcher #(
+    parameter IMEM_INIT = ""
+) (
     input  logic        clk,
     input  logic        rst_n,
     input  logic        stall,       // hold PC and IF/ID register
@@ -22,7 +24,7 @@ module instruction_fetcher (
         .pc        (current_pc)
     );
 
-    imem imem_inst (
+    imem #(.INIT_FILE(IMEM_INIT)) imem_inst (
         .read_address (current_pc),
         .instr        (raw_instr)
     );

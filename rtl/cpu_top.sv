@@ -1,8 +1,15 @@
 module cpu_top
     import riscv_pkg::*;
-(
-    input  logic clk,
-    input  logic rst_n
+#(
+    parameter IMEM_INIT = "",          // program for the instruction memory (FPGA)
+    parameter DMEM_INIT = ""           // initial data memory contents (FPGA)
+) (
+    input  logic       clk,
+    input  logic       rst_n,
+
+    // memory-mapped I/O, see mmio.sv
+    input  logic [7:0] switches,
+    output logic [7:0] leds
 );
 
     // =======================================================================
@@ -43,6 +50,9 @@ module cpu_top
     // MEM
     logic [31:0] mem_load_data;
     logic        mem_misaligned;     // not used yet, becomes an exception later
+    mem_ctrl_t   mem_dmem_ctrl;      // access forwarded to the data memory
+    logic        mem_is_io;
+    logic [31:0] mem_io_rdata;
 
     // MEM/WB
     wb_ctrl_t    mem_wb_wb_ctrl;
@@ -71,7 +81,7 @@ module cpu_top
     // IF (+ IF/ID register)
     // =======================================================================
 
-    instruction_fetcher fetch_inst (
+    instruction_fetcher #(.IMEM_INIT(IMEM_INIT)) fetch_inst (
         .clk       (clk),
         .rst_n     (rst_n),
         .stall     (stall),
@@ -194,9 +204,28 @@ module cpu_top
     // MEM
     // =======================================================================
 
-    memory_stage memory_inst (
+    mmio mmio_inst (
         .clk        (clk),
+        .rst_n      (rst_n),
         .mem_ctrl   (ex_mem_mem_ctrl),
+        .addr       (ex_mem_alu_result),
+        .store_data (ex_mem_store_data),
+        .is_io      (mem_is_io),
+        .io_rdata   (mem_io_rdata),
+        .switches   (switches),
+        .leds       (leds)
+    );
+
+    // I/O accesses must not reach the data memory: it only decodes the low
+    // address bits, so a store to 0x8000_0000 would overwrite word 0.
+    always_comb begin
+        mem_dmem_ctrl = ex_mem_mem_ctrl;
+        if (mem_is_io) mem_dmem_ctrl.mem_write = 1'b0;
+    end
+
+    memory_stage #(.DMEM_INIT(DMEM_INIT)) memory_inst (
+        .clk        (clk),
+        .mem_ctrl   (mem_dmem_ctrl),
         .addr       (ex_mem_alu_result),
         .store_data (ex_mem_store_data),
         .funct3     (ex_mem_funct3),
@@ -209,7 +238,7 @@ module cpu_top
         .rst_n          (rst_n),
         .wb_ctrl_in     (ex_mem_wb_ctrl),
         .alu_result_in  (ex_mem_alu_result),
-        .load_data_in   (mem_load_data),
+        .load_data_in   (mem_is_io ? mem_io_rdata : mem_load_data),
         .pc_plus4_in    (ex_mem_pc_plus4),
         .rd_in          (ex_mem_rd),
         .wb_ctrl_out    (mem_wb_wb_ctrl),
