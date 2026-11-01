@@ -54,13 +54,18 @@ module cpu_top
     logic [4:0]  wb_rd;
     logic [31:0] wb_data;
 
-    // Hazard handling: not implemented yet
-    logic        stall;
+    // Hazard handling
+    logic        stall;                // load-use hazard: hold PC and IF/ID, bubble into ID/EX
     logic [1:0]  forward_a, forward_b;
+    logic [31:0] ex_mem_fwd_value;     // value the instruction in MEM will write back
 
-    assign stall     = 1'b0;
-    assign forward_a = 2'b00;
-    assign forward_b = 2'b00;
+    hazard_unit hazard_inst (
+        .id_ex_mem_read (id_ex_mem_ctrl.mem_read),
+        .id_ex_rd       (id_ex_rd),
+        .id_rs1         (id_rs1),
+        .id_rs2         (id_rs2),
+        .load_use_stall (stall)
+    );
 
     // =======================================================================
     // IF (+ IF/ID register)
@@ -101,8 +106,8 @@ module cpu_top
     id_ex_reg id_ex_inst (
         .clk          (clk),
         .rst_n        (rst_n),
-        .stall        (stall),
-        .flush        (ex_pc_sel),     // the instruction in ID is on the wrong path
+        .stall        (1'b0),
+        .flush        (ex_pc_sel | stall),   // wrong path, or bubble while ID waits for a load
         .ex_ctrl_in   (id_ex_ctrl),
         .mem_ctrl_in  (id_mem_ctrl),
         .wb_ctrl_in   (id_wb_ctrl),
@@ -131,6 +136,22 @@ module cpu_top
     // EX
     // =======================================================================
 
+    forwarding_unit forwarding_inst (
+        .id_ex_rs1        (id_ex_rs1),
+        .id_ex_rs2        (id_ex_rs2),
+        .ex_mem_reg_write (ex_mem_wb_ctrl.reg_write),
+        .ex_mem_rd        (ex_mem_rd),
+        .mem_wb_reg_write (mem_wb_wb_ctrl.reg_write),
+        .mem_wb_rd        (mem_wb_rd),
+        .forward_a        (forward_a),
+        .forward_b        (forward_b)
+    );
+
+    // For JAL/JALR the result is pc + 4, not the ALU output. For a load the
+    // value does not exist yet in MEM; the hazard unit stalls that case.
+    assign ex_mem_fwd_value = (ex_mem_wb_ctrl.wb_sel == WB_PC4) ? ex_mem_pc_plus4
+                                                                : ex_mem_alu_result;
+
     execute_stage execute_inst (
         .ex_ctrl       (id_ex_ex_ctrl),
         .pc            (id_ex_pc),
@@ -140,7 +161,7 @@ module cpu_top
         .funct3        (id_ex_funct3),
         .forward_a     (forward_a),
         .forward_b     (forward_b),
-        .ex_mem_result (ex_mem_alu_result),
+        .ex_mem_result (ex_mem_fwd_value),
         .wb_data       (wb_data),
         .alu_result    (ex_alu_result),
         .store_data    (ex_store_data),

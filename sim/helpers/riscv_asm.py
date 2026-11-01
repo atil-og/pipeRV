@@ -9,7 +9,8 @@
 
 Branch and jump targets can be labels or byte offsets. With padding > 0 every
 instruction is followed by that many NOPs, so a program runs correctly on a
-pipeline without forwarding.
+pipeline without forwarding. load_padding adds NOPs after loads only, for a
+pipeline with forwarding but without load-use hazard detection.
 """
 
 NOP = 0x00000013  # addi x0, x0, 0
@@ -56,8 +57,9 @@ def j_type(imm, rd):
 # ---------------------------------------------------------------------------
 
 class Program:
-    def __init__(self, padding=0):
+    def __init__(self, padding=0, load_padding=0):
         self.padding = padding
+        self.load_padding = load_padding
         self.items = []           # ints, or functions (pc, labels) -> int
         self.labels = {}
 
@@ -120,6 +122,8 @@ class Program:
 
     def _load(self, funct3, rd, imm, rs1, pad=True):
         self._i(funct3, rd, rs1, imm, pad, opcode=0b0000011)
+        if pad:
+            self.items.extend([NOP] * self.load_padding)
 
     def lb(self, rd, imm, rs1, pad=True):  self._load(0b000, rd, imm, rs1, pad)
     def lh(self, rd, imm, rs1, pad=True):  self._load(0b001, rd, imm, rs1, pad)

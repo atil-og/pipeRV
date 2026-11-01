@@ -1,9 +1,9 @@
 """Whole-CPU tests: run small programs and check registers and data memory.
 
-There is no forwarding and no hazard detection yet, so every program is built
-with padding=3: three NOPs after each instruction. That is the distance at which
-a result has been written to the register file before the next instruction
-reads it (WB writes at the end of the cycle in which ID would read).
+Forwarding and the register file bypass are in place, so programs run without
+NOPs. Only loads still need one NOP behind them: the loaded value exists only
+after MEM, one cycle too late for the next instruction in EX. That gap is
+closed by load-use hazard detection, after which LOAD_PADDING becomes 0.
 """
 
 import cocotb
@@ -13,7 +13,8 @@ from cocotb.triggers import RisingEdge, Timer
 from helpers.riscv_asm import Program
 
 
-PADDING = 3
+PADDING = 0
+LOAD_PADDING = 1
 MASK32 = 0xFFFFFFFF
 
 
@@ -76,7 +77,7 @@ def check_regs(dut, expected):
 @cocotb.test()
 async def test_arithmetic(dut):
     """R- and I-type ALU instructions, results checked in the register file."""
-    p = Program(padding=PADDING)
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
     p.addi(1, 0, 5)
     p.addi(2, 0, -3)
     p.add(3, 1, 2)          # 2
@@ -99,7 +100,7 @@ async def test_arithmetic(dut):
 @cocotb.test()
 async def test_x0_stays_zero(dut):
     """Writing x0 has no effect."""
-    p = Program(padding=PADDING)
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
     p.addi(0, 0, 123)
     p.add(1, 0, 0)
     p.halt()
@@ -116,20 +117,21 @@ async def test_x0_stays_zero(dut):
 @cocotb.test()
 async def test_upper_immediates(dut):
     """lui, auipc and the li pseudo-instruction."""
-    p = Program(padding=PADDING)
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
     p.lui(1, 0x12345)                # 0x12345000
-    p.auipc(2, 0x1)                  # pc + 0x1000, pc = 4 * 4 = 16 (after lui + 3 NOPs)
+    p.label("auipc")
+    p.auipc(2, 0x1)                  # pc of this instruction + 0x1000
     p.li(3, 0xDEADBEEF)              # lui + addi with a negative low part
     p.li(4, -1)
     p.halt()
     await run(dut, p)
-    check_regs(dut, {1: 0x12345000, 2: 0x1010, 3: 0xDEADBEEF, 4: -1})
+    check_regs(dut, {1: 0x12345000, 2: p.labels["auipc"] + 0x1000, 3: 0xDEADBEEF, 4: -1})
 
 
 @cocotb.test()
 async def test_load_store(dut):
     """Stores of all widths, loads with sign and zero extension."""
-    p = Program(padding=PADDING)
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
     p.addi(1, 0, 0x40)               # base address
     p.li(2, 0x80FF7F01)
     p.sw(2, 0, 1)
@@ -153,7 +155,7 @@ async def test_load_store(dut):
 @cocotb.test()
 async def test_loop(dut):
     """A counting loop with a backward branch: sum 1..10 = 55."""
-    p = Program(padding=PADDING)
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
     p.addi(1, 0, 0)                  # sum
     p.addi(2, 0, 1)                  # i
     p.addi(3, 0, 11)                 # limit
@@ -169,7 +171,7 @@ async def test_loop(dut):
 @cocotb.test()
 async def test_branches(dut):
     """Every branch type, taken and not taken. x10 counts the taken ones."""
-    p = Program(padding=PADDING)
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
     p.addi(1, 0, -1)
     p.addi(2, 0, 1)
     p.addi(10, 0, 0)
@@ -203,7 +205,7 @@ async def test_call_return(dut):
     flushed once when the call happens, and executed once after the return.
     If the flush did not work, x5 and x6 would end up at 2.
     """
-    p = Program(padding=PADDING)
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
     p.jal(1, "func", pad=False)      # 0: call, x1 = 4
     p.addi(5, 5, 1, pad=False)       # 4: flushed on the call, runs after return
     p.addi(6, 6, 1, pad=False)       # 8: same
@@ -218,3 +220,100 @@ async def test_call_return(dut):
     await run(dut, p, cycles=60)
 
     check_regs(dut, {1: 4, 5: 1, 6: 1, 8: 1, 9: 0, 3: p.labels["ret"] + 4})
+
+
+# ---------------------------------------------------------------------------
+# Forwarding: every distance and every consumer of a forwarded value
+# ---------------------------------------------------------------------------
+
+@cocotb.test()
+async def test_forward_chain(dut):
+    """Each instruction uses the result of the one directly before (EX/MEM forwarding)."""
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
+    p.addi(1, 0, 1)
+    for _ in range(10):
+        p.add(1, 1, 1)               # doubles x1 every time
+    p.halt()
+    await run(dut, p)
+    check_regs(dut, {1: 1 << 10})
+
+
+@cocotb.test()
+async def test_forward_distances(dut):
+    """Producer 1, 2 and 3 instructions ahead, on rs1 and on rs2.
+
+    Distance 1 -> EX/MEM, distance 2 -> MEM/WB, distance 3 -> register file bypass.
+    """
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
+    for dist in (1, 2, 3):
+        base = 4 * dist + 1                      # x5..x8, x9..x12, x13..x16
+        p.addi(base, 0, 100 + dist)              # producer
+        for _ in range(dist - 1):
+            p.addi(31, 31, 0)                    # unrelated filler
+        p.add(base + 1, base, 0)                 # consumer on rs1
+        p.addi(base + 2, 0, 200 + dist)          # producer
+        for _ in range(dist - 1):
+            p.addi(31, 31, 0)
+        p.add(base + 3, 0, base + 2)             # consumer on rs2
+    p.halt()
+    await run(dut, p)
+    for dist in (1, 2, 3):
+        base = 4 * dist + 1                      # x5..x8, x9..x12, x13..x16
+        check_regs(dut, {base + 1: 100 + dist, base + 3: 200 + dist})
+
+
+@cocotb.test()
+async def test_forward_newest_wins(dut):
+    """Two writes to the same register in a row: the newer value must be used."""
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
+    p.addi(1, 0, 1)
+    p.addi(1, 0, 2)                  # newer, in MEM while the older one is in WB
+    p.add(2, 1, 0)
+    p.halt()
+    await run(dut, p)
+    check_regs(dut, {2: 2})
+
+
+@cocotb.test()
+async def test_forward_into_store_and_branch(dut):
+    """Forwarded values as store data, store address and branch operands."""
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
+    p.addi(1, 0, 0x80)               # address, used right away
+    p.addi(2, 0, 0x5A)               # data, used right away
+    p.sw(2, 0, 1)
+    p.addi(3, 0, 7)
+    p.addi(4, 0, 7)
+    p.beq(3, 4, "taken")             # both operands forwarded
+    p.addi(5, 0, 1)                  # skipped if forwarding works
+    p.label("taken")
+    p.halt()
+    await run(dut, p)
+    assert word(dut, 0x80) == 0x5A, f"word at 0x80 = 0x{word(dut, 0x80):08x}, expected 0x5a"
+    check_regs(dut, {5: 0})
+
+
+@cocotb.test()
+async def test_forward_after_load(dut):
+    """A load followed by one NOP, then the value is forwarded from MEM/WB."""
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
+    p.addi(1, 0, 0x40)
+    p.addi(2, 0, 123)
+    p.sw(2, 0, 1)
+    p.lw(3, 0, 1)                    # + 1 NOP from load_padding
+    p.addi(4, 3, 1)
+    p.halt()
+    await run(dut, p)
+    check_regs(dut, {3: 123, 4: 124})
+
+
+@cocotb.test()
+async def test_forward_link_register(dut):
+    """The return address of jal is used right after the jump target."""
+    p = Program(padding=PADDING, load_padding=LOAD_PADDING)
+    p.jal(1, "target")               # x1 = 4
+    p.halt()
+    p.label("target")
+    p.addi(2, 1, 100)                # needs x1 immediately
+    p.halt()
+    await run(dut, p)
+    check_regs(dut, {1: 4, 2: 104})
